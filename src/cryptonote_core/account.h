@@ -42,11 +42,13 @@ namespace cryptonote
     account_public_address m_account_address;
     crypto::secret_key   m_spend_secret_key;
     crypto::secret_key   m_view_secret_key;
+    crypto::secret_key   m_seed;
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(m_account_address)
       KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_spend_secret_key)
       KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_view_secret_key)
+      KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_seed)
     END_KV_SERIALIZE_MAP()
   };
 
@@ -57,7 +59,7 @@ namespace cryptonote
   {
   public:
     account_base();
-    crypto::secret_key generate(const crypto::secret_key& recovery_key = crypto::secret_key(), bool recover = false, bool two_random = false);
+    crypto::secret_key generate(const crypto::secret_key& recovery_key = crypto::secret_key(), bool recover = false, bool two_random = false, size_t num_words = 0);
     const account_keys& get_keys() const;
     std::string get_public_address_str(bool testnet);
 

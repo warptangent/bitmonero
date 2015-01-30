@@ -144,7 +144,7 @@ namespace tools
      */
     crypto::secret_key generate(const std::string& wallet, const std::string& password,
       const crypto::secret_key& recovery_param = crypto::secret_key(), bool recover = false,
-      bool two_random = false);
+      bool two_random = false, size_t num_words=0);
     /*!
      * \brief Rewrites to the wallet file for wallet upgrade (doesn't generate key, assumes it's already there)
      * \param wallet_name Name of wallet file (should exist)

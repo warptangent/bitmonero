@@ -201,6 +201,7 @@ std::string simple_wallet::get_commands_str()
 bool simple_wallet::viewkey(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   success_msg_writer() << string_tools::pod_to_hex(m_wallet->get_account().get_keys().m_view_secret_key) << std::endl;
+  success_msg_writer() << string_tools::pod_to_hex(m_wallet->get_account().get_keys().m_spend_secret_key) << std::endl;
 
   return true;
 }
@@ -469,6 +470,7 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
     if (m_wallet_file.empty()) m_wallet_file = m_generate_new;  // alias for simplicity later
 
     std::string old_language;
+    size_t num_words = 0;
     // check for recover flag.  if present, require electrum word list (only recovery option for now).
     if (m_restore_deterministic_wallet)
     {
@@ -488,14 +490,14 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
         }
       }
 
-      if (!crypto::ElectrumWords::words_to_bytes(m_electrum_seed, m_recovery_key, old_language))
+      if (!crypto::ElectrumWords::words_to_bytes(m_electrum_seed, m_recovery_key, old_language, num_words))
       {
         fail_msg_writer() << "electrum-style word list failed verification";
         return false;
       }
     }
     bool r = new_wallet(m_wallet_file, pwd_container.password(), m_recovery_key, m_restore_deterministic_wallet,
-      m_non_deterministic, testnet, old_language);
+      m_non_deterministic, testnet, old_language, num_words);
     CHECK_AND_ASSERT_MES(r, false, "account creation failed");
   }
   else
@@ -581,7 +583,7 @@ std::string simple_wallet::get_mnemonic_language()
 
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::new_wallet(const std::string &wallet_file, const std::string& password, const crypto::secret_key& recovery_key,
-  bool recover, bool two_random, bool testnet, const std::string &old_language)
+  bool recover, bool two_random, bool testnet, const std::string &old_language, size_t num_words)
 {
   bool was_deprecated_wallet = m_restore_deterministic_wallet && ((old_language == crypto::ElectrumWords::old_language_name) ||
     crypto::ElectrumWords::get_is_old_style_seed(m_electrum_seed));
@@ -611,7 +613,7 @@ bool simple_wallet::new_wallet(const std::string &wallet_file, const std::string
   crypto::secret_key recovery_val;
   try
   {
-    recovery_val = m_wallet->generate(wallet_file, password, recovery_key, recover, two_random);
+    recovery_val = m_wallet->generate(wallet_file, password, recovery_key, recover, two_random, num_words);
     message_writer(epee::log_space::console_color_white, true) << "Generated new wallet: "
       << m_wallet->get_account().get_public_address_str(m_wallet->testnet()) << std::endl << "view key: "
       << string_tools::pod_to_hex(m_wallet->get_account().get_keys().m_view_secret_key);

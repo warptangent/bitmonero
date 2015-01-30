@@ -75,7 +75,7 @@ namespace cryptonote
     bool run_console_handler();
 
     bool new_wallet(const std::string &wallet_file, const std::string& password, const crypto::secret_key& recovery_key,
-        bool recover, bool two_random, bool testnet, const std::string &old_language);
+        bool recover, bool two_random, bool testnet, const std::string &old_language, size_t num_words);
     bool open_wallet(const std::string &wallet_file, const std::string& password, bool testnet);
     bool close_wallet();
 

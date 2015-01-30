@@ -44,6 +44,9 @@ extern "C"
 #include "cryptonote_core/cryptonote_format_utils.h"
 using namespace std;
 
+// TODO CONFIG
+int mode_key_generation = 1; // MyMonero
+
 DISABLE_VS_WARNINGS(4244 4345)
 
   namespace cryptonote
@@ -59,13 +62,87 @@ DISABLE_VS_WARNINGS(4244 4345)
     m_keys = account_keys();
   }
   //-----------------------------------------------------------------
-  crypto::secret_key account_base::generate(const crypto::secret_key& recovery_key, bool recover, bool two_random)
+  crypto::secret_key account_base::generate(const crypto::secret_key& recovery_key, bool recover, bool two_random, size_t num_words)
   {
-    crypto::secret_key first = generate_keys(m_keys.m_account_address.m_spend_public_key, m_keys.m_spend_secret_key, recovery_key, recover);
+    crypto::secret_key use_recovery_key;
+    if (recover)
+    {
+      bool half_seed = false;
+      // for debugging only
+      if (num_words == 12)
+      {
+        half_seed = true;
+      }
+      // TODO: finish implementation and test
+      // this is also for when recovery from seed hex is supported.
+      size_t len = sizeof(recovery_key.data);
+      while ((len > 0) && (! recovery_key.data[len - 1])) {
+        --len;
+      }
+      if (len <= sizeof(crypto::secret_key) / 2) // TODO refactor with elsewhere
+      {
+        std::cout << "key length minus end null bytes less than normal size/2" << std::endl;
+        if ((num_words) && (num_words != 12))
+        {
+          throw std::runtime_error("Seed words used, but the number doesn't match expected number for a recovery key half filled.");
+        }
+        half_seed = true;
+      }
+      else if (num_words == 12)
+      {
+          throw std::runtime_error("Seed words used, with half the normal number, but the recovery key doesn't look half filled.");
+      }
+      std::cout << "num_words:  " << num_words << "  half_seed? " << half_seed << std::endl;
+      if (! half_seed)
+      {
+        use_recovery_key = recovery_key;
+      }
+      else
+      {
+        if (mode_key_generation == 0)
+        {
+          use_recovery_key = recovery_key;
+          memcpy(use_recovery_key.data + 16, use_recovery_key.data, 16);  // if electrum 12-word seed, duplicate
+        }
+        else if (mode_key_generation == 1)
+        {
+          keccak((uint8_t *)&recovery_key.data, sizeof(crypto::secret_key) / 2, (uint8_t *)&use_recovery_key.data, sizeof(crypto::secret_key));
+        }
+        else
+        {
+          // TODO: throw runtime exception
+        }
+        std::cout << "use_recovery_key.data:  " << epee::string_tools::pod_to_hex(use_recovery_key.data) << std::endl;
+        // because of keccak used to expand can't reverse this back to the twelve-word seed, only to new twenty-four words.
+      }
+
+      // recovery key deemed acceptable, assign to stored seed
+      m_keys.m_seed = recovery_key;
+    }
+
+    crypto::secret_key first = generate_keys(m_keys.m_account_address.m_spend_public_key, m_keys.m_spend_secret_key, use_recovery_key, recover);
+
+    if (! recover)
+    {
+      m_keys.m_seed = first;
+    }
 
     // rng for generating second set of keys is hash of first rng.  means only one set of electrum-style words needed for recovery
     crypto::secret_key second;
-    keccak((uint8_t *)&m_keys.m_spend_secret_key, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+
+    if (mode_key_generation == 0)
+    {
+      // monero behavior
+      keccak((uint8_t *)&m_keys.m_spend_secret_key, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+    }
+    else if (mode_key_generation == 1)
+    {
+      // mymonero behavior
+      // "first" is the rng / provided seed recovery key prior to sc_reduce32().
+      // note that in original behavior, sc_reduce and a halving is done during
+      // rng generation. see random_scalar().
+      keccak((uint8_t *)&first, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+    }
 
     generate_keys(m_keys.m_account_address.m_view_public_key, m_keys.m_view_secret_key, second, two_random ? false : true);
 
@@ -85,7 +162,7 @@ DISABLE_VS_WARNINGS(4244 4345)
     {
       m_creation_timestamp = time(NULL);
     }
-    return first;
+    return m_keys.m_seed;
   }
   //-----------------------------------------------------------------
   const account_keys& account_base::get_keys() const

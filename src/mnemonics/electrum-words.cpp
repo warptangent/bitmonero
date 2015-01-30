@@ -200,13 +200,14 @@ namespace crypto
      * \return                 false if not a multiple of 3 words, or if word is not in the words list
      */
     bool words_to_bytes(std::string words, crypto::secret_key& dst,
-      std::string &language_name)
+      std::string &language_name, size_t &num_words)
     {
       std::vector<std::string> seed;
 
       boost::algorithm::trim(words);
       boost::split(seed, words, boost::is_any_of(" "));
 
+      num_words = seed.size(); // TODO replace seed.size() below with num_words
       // error on non-compliant word list
       if (seed.size() != seed_length/2 && seed.size() != seed_length &&
         seed.size() != seed_length + 1)
@@ -236,6 +237,7 @@ namespace crypto
         seed.pop_back();
       }
 
+      memset(dst.data, 0, sizeof(dst.data));
       for (unsigned int i=0; i < seed.size() / 3; i++)
       {
         uint32_t val;
@@ -255,10 +257,25 @@ namespace crypto
       std::string wlist_copy = words;
       if (seed.size() == seed_length/2)
       {
-        memcpy(dst.data+16, dst.data, 16);  // if electrum 12-word seed, duplicate
+        // for when 12 words are used:
+        // use dst.data half-filled as seed, so seed words can be re-obtained later.
+        // (due to keccak expansion below, we can't do that otherwise.
+        // so expand later when seed is to be used, but store this half-filled version as the actual seed.
+
+        // mode_key_generation: 0
+        // memcpy(dst.data+16, dst.data, 16);  // if electrum 12-word seed, duplicate
+        //
+        // mode_key_generation: 1  MyMonero.com
+        // keccak((uint8_t *)&dst.data, sizeof(crypto::secret_key) / 2, (uint8_t *)&dst.data, sizeof(crypto::secret_key));
+        // because of keccak used to expand can't reverse this back to the twelve-word seed, only twenty-four, we handle the use of the seed later.
+
+        // TODO: this is from the past and was used to verify the words can be regenerated from the seed.
+        // since we're using the correct notion of "seed" now for the 12 words too (handling seed expansion later), this check can be added back.
         wlist_copy += ' ';
         wlist_copy += words;
       }
+
+      // TODO: add seed verification check here.
 
       return true;
     }
@@ -302,8 +319,20 @@ namespace crypto
       std::vector<std::string> words_store;
 
       uint32_t word_list_length = word_list.size();
+      // for fully used src.data:
       // 8 bytes -> 3 words.  8 digits base 16 -> 3 digits base 1626
-      for (unsigned int i=0; i < sizeof(src.data)/4; i++, words += ' ')
+      //
+      // half that for one based on 12 words
+      size_t use_size = sizeof(src.data);
+      size_t len = use_size;
+      while ((len > 0) && (! src.data[len - 1])) {
+        --len;
+      }
+      if (len <= sizeof(crypto::secret_key) / 2) // TODO refactor with elsewhere
+      {
+        use_size = use_size / 2;
+      }
+      for (unsigned int i=0; i < use_size / 4; i++, words += ' ')
       {
         uint32_t w1, w2, w3;
         
